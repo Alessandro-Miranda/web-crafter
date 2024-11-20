@@ -2,6 +2,8 @@
 
 **WebCrafter** é uma automatização desenvolvida em **Node.js** projetada para criar cópias de websites, sendo ideal para a reutilização de templates ou análse offline. O script salva o html e arquivos estáticos do site a ser copiado, além de realizar a atualização da URL dentro do arquivo html baixado inicialmente.
 
+_**Obs:** Atualmente o projeto apenas faz a cópia de Landing Pages. Versões futuras estão sendo trabalhadas para cópia de páginas internas._
+
 ---
 
 ## Recursos
