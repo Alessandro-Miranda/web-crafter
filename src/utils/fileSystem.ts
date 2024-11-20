@@ -16,8 +16,10 @@
   along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************** */
 
+import { exec } from 'child_process';
 import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import { dirname } from 'path';
+import { ErrorMessages, Message } from './message';
 
 export class FileSystem {
   public static createFolder(folderName: string) {
@@ -30,5 +32,16 @@ export class FileSystem {
     this.createFolder(dirname(path));
 
     writeFileSync(path, content);
+  }
+
+  public static openFolderInExplorerAndExit(folderPath: string) {
+    exec(`start "" explorer "${folderPath}"`, (error) => {
+      if (error) {
+        Message.show('error', ErrorMessages.OPENING_FOLDER + error);
+        process.exit(1);
+      }
+
+      process.exit(0);
+    });
   }
 }
