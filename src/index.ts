@@ -1,5 +1,5 @@
 /*! *************************************************************************
-  <one line to give the program's name and a brief idea of what it does.>
+  Webcrafter - A simple offline browser utility, allowing you to download a website to a local directory, getting css and javascript files and building original directories structure based on template.
   Copyright (C) 2024  Alessandro Lima de Miranda
 
   This program is free software: you can redistribute it and/or modify
@@ -16,95 +16,108 @@
   along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************** */
 
-import { JSDOM, VirtualConsole } from 'jsdom';
-import { normalize } from 'path';
-import { ArgumentsTypes } from './@types/arguments';
-import { findArgumentByName, getArguments } from './utils/arguments';
-import { FileSystem } from './utils/handleFileSystem';
-import { WebCrafter } from './webcrafter';
+import { exec } from "child_process";
+import { normalize } from "path";
+import { EmulateDom } from "./helpers/emulateDom";
+import { AllowedArgs, ArgumentHandle } from "./utils/arguments";
+import { FileSystem } from "./utils/handleFileSystem";
+import { ErrorMessages, Message, StatusMessages } from "./utils/message";
 
-async function initWebCrafter() {
-  const args = getArguments();
-  console.log('Obtendo o nome do projeto e url do template');
-  const projectName = findArgumentByName(args, ArgumentsTypes.SITE_NAME);
-  const folderPath = normalize(`${process.cwd()}/${projectName}`);
+class Webcrafter {
+  private SITE_NAME: string | undefined;
+  private TEMPLATE_URL: string | undefined;
+  private projectFolderPath = '';
 
-  try {
-    console.log('Criando pasta para o projeto');
-    FileSystem.createFolder(folderPath);
-  } catch (err) {
-    console.error('Erro ao criar a pasta para o projeto: ', err);
-    return;
+  constructor(Arguments: typeof ArgumentHandle) {
+    Message.show('status', StatusMessages.START);
+    this.SITE_NAME = Arguments.findArgumentByName(AllowedArgs.SITE_NAME);
+    this.TEMPLATE_URL = Arguments.findArgumentByName(AllowedArgs.TEMPLATE_URL);
   }
 
-  const templateURL = findArgumentByName(args, ArgumentsTypes.TEMPLATE_URL);
-  console.log('Fazendo o download do template')
-  const templateHTML = await WebCrafter.downloadFrom(templateURL);
+  public async init() {
+    if (!this.SITE_NAME || !this.TEMPLATE_URL) {
+      Message.show(
+        'error',
+        ErrorMessages.INVALID_ARGUMENTS +
+          'É necessário passar o nome do site e link do template para continuar'
+      );
+      return;
+    }
 
-  const virtualConsole = new VirtualConsole();
-  const { window } = new JSDOM(templateHTML, { virtualConsole, resources: 'usable', runScripts: 'outside-only' });
+    this.projectFolderPath = normalize(`${process.cwd()}/${this.SITE_NAME}`);
 
-  const cssLinks = window.document.querySelectorAll('link[rel=stylesheet]') as NodeListOf<HTMLLinkElement>;
-  const scripts = window.document.querySelectorAll('script[src]') as NodeListOf<HTMLScriptElement>;
-  
-  const rocketLazyLoadadedScripts = window.document.querySelectorAll('script[data-rocket-src]') as NodeListOf<HTMLScriptElement>;
+    if (!this.createProjectFolder().isCreated) return;
 
-  const filesToDownload: string[] = [];
+    try {
+      Message.show('status', StatusMessages.DOWNLOADING_FILE + ' Fazendo download do template html');
+      const htmlTemplate = await this.downloadFrom(this.TEMPLATE_URL);
+      Message.show('status', StatusMessages.DOWNLOAD_FINISHED + ' Download do template concluído');
 
-  console.log('Atualizando urls de arquivos css e js no template');
+      const dom = new EmulateDom(htmlTemplate);
+      
+      Message.show('status', StatusMessages.GETTING_ASSETS_URLS + ' Obtendo URL dos arquivos css e javascript');
 
-  cssLinks.forEach(link => {
-    if (link.href.search('(fonts|cdn)') !== -1) return;
+      const assetsUrls = dom.getAssetsUrl();
 
-    link.href = link.href.replace(/\?.{1,}$/, '');
-    filesToDownload.push(link.href);
-    link.href = link.href.replace(/https:\/\/[^\/]+/, '');
-  });
+      Message.show('status', StatusMessages.DOWNLOADING_FILE + ' baixando arquivos Css e Javascript e atualizando URL\'s no index.html');
 
-  scripts.forEach(script => {
-    if (script.src.search('(gtm|gstatic|connect|analytics|gtag)') !== -1) return 
-    script.src = script.src.replace(/\?.{1,}$/, '');
-    filesToDownload.push(script.src);
-    script.src = script.src.replace(templateURL.replace(/https:\/\/[^\/]+/, ''), '');
-  });
+      Message.show('status', StatusMessages.SAVING_FILE + ' Salvando template html');
 
-  rocketLazyLoadadedScripts.forEach(script => {
-    script.src = (script.dataset.rocketSrc as string).replace(/\?.{1,}$/, '');
-    filesToDownload.push(script.src);
-    script.src = script.src.replace(templateURL.replace(/\/$/, ''), '');
-  });
+      FileSystem.saveContent(normalize(this.projectFolderPath + '/index.html'), dom.getUpdatedHtml());
 
-  try {
-    console.log('Salvando template')
-    FileSystem.saveContent(
-      normalize(folderPath + '/' + 'index.html'),
-      window.document.documentElement.outerHTML
-    );
-    console.log('Template salvo com sucesso!');
-  } catch (err) {
-    console.error('Erro ao salvar HTML: ', err);
-    return;
+      for await (const asset of this.downloadAssetsFrom(assetsUrls)) {
+        Message.show('status', StatusMessages.DOWNLOAD_FINISHED + ' ' + asset.fileName);
+        Message.show('status', StatusMessages.SAVING_FILE + ' ' + asset.fileName);
+        const assetLocalName = asset.fileName.replace(/https:\/\/[^\/]+/, '');
+        FileSystem.saveContent(normalize(this.projectFolderPath + '/' + assetLocalName), asset.file);
+        Message.show('status', StatusMessages.FILE_SAVED + ' ' + asset.fileName);
+      }
+
+
+      Message.show('status', StatusMessages.DOWNLOAD_FINISHED + ' Download de arquivos concluídos. Todos os arquivos foram salvos na pasta: ' + this.projectFolderPath);
+      Message.show('status', 'Abrindo a pasta do projeto');
+
+      exec(`start "" explorer "${this.projectFolderPath}"`, (error) => {
+        if (error) {
+          Message.show('error', ErrorMessages.OPENING_FOLDER + error);
+          process.exit(1);
+        }
+
+        process.exit(0);
+      });
+    } catch(err) {
+      Message.show('error', ErrorMessages.DOWNLOADING_FILE + ' Erro ao baixar o template html ' + err);
+    }
   }
 
-  console.log('baixando arquivos css e javascript');
 
-  for await (const asset of downloadAssets(filesToDownload)) {
-    console.log('arquivo baixado: ', asset.fileName);
-    console.log('salvando o arquivo ', asset.fileName);
-    const assetLocalName = asset.fileName.replace(/https:\/\/[^\/]+/, '')
-    FileSystem.saveContent(normalize(folderPath + '/' + assetLocalName), asset.file)
-    console.log('Arquivo ', asset.fileName, ' salvo');
+  private createProjectFolder() {
+    const status = { isCreated: false };
+
+    try {
+      Message.show('status', StatusMessages.CREATING_FOLDER + ' Criando a pasta ' + this.SITE_NAME);
+      FileSystem.createFolder(this.projectFolderPath);
+      Message.show('status', StatusMessages.FOLDER_CREATED);
+      status.isCreated = true;
+    } catch (error) {
+      Message.show('error', ErrorMessages.CREATING_FOLDER + this.SITE_NAME + ' ' + error);
+    }
+
+    return status;
   }
 
-  console.log('Download de arquivos finalizado. O arquivo index.html, arquivos CSS e javascript forma salvos na pasta do projeto.');
-  console.log('Os arquivos encontam-se disponíveis na pasta: ', folderPath);
+  private async *downloadAssetsFrom(links: string[]) {
+    for (const link of links) {
+      const file = await this.downloadFrom(link);
+      yield { file, fileName: link };
+    }
+  }
+
+
+  private async downloadFrom(url: string): Promise<string> {
+    return fetch(url).then((resp) => resp.text());
+  }
 }
 
-async function* downloadAssets(links: string[]) {
-  for (const link of links) {
-    const file = await WebCrafter.downloadFrom(link);
-    yield { file, fileName: link };
-  }
-}
-
-initWebCrafter();
+const crafter = new Webcrafter(ArgumentHandle);
+crafter.init();
