@@ -15,7 +15,7 @@
   },
   "scripts": {
     "dev": "ts-node ./src/index.ts --site-name=temp-test --template-url=https://pellegrintransporte.com.br/",
-    "build": "tsc && echo #!/usr/bin/env node | cat - dist/index.js > temp && mv temp dist/index.js",
+    "build": "tsc && echo #!/usr/bin/env node | cat - dist/index.js > temp && mv temp dist/index.js && npm link",
     "lint": "eslint \"./src/**/*.{ts,js}\" --fix",
     "test": "jest",
     "test:watch": "jest --watch"
