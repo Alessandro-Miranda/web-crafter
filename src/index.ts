@@ -1,3 +1,21 @@
+/*! *************************************************************************
+  <one line to give the program's name and a brief idea of what it does.>
+  Copyright (C) 2024  Alessandro Lima de Miranda
+
+  This program is free software: you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation, either version 3 of the License, or
+  (at your option) any later version.
+
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+************************************************************************** */
+
 import { JSDOM, VirtualConsole } from 'jsdom';
 import { normalize } from 'path';
 import { ArgumentsTypes } from './@types/arguments';
@@ -28,7 +46,7 @@ async function initWebCrafter() {
 
   const cssLinks = window.document.querySelectorAll('link[rel=stylesheet]') as NodeListOf<HTMLLinkElement>;
   const scripts = window.document.querySelectorAll('script[src]') as NodeListOf<HTMLScriptElement>;
-  scripts.forEach(script => console.log(script.src));
+  
   const rocketLazyLoadadedScripts = window.document.querySelectorAll('script[data-rocket-src]') as NodeListOf<HTMLScriptElement>;
 
   const filesToDownload: string[] = [];
@@ -36,15 +54,18 @@ async function initWebCrafter() {
   console.log('Atualizando urls de arquivos css e js no template');
 
   cssLinks.forEach(link => {
+    if (link.href.search('(fonts|cdn)') !== -1) return;
+
     link.href = link.href.replace(/\?.{1,}$/, '');
     filesToDownload.push(link.href);
-    link.href = link.href.replace(templateURL.replace(/\/$/, ''), '');
+    link.href = link.href.replace(/https:\/\/[^\/]+/, '');
   });
 
   scripts.forEach(script => {
+    if (script.src.search('(gtm|gstatic|connect|analytics|gtag)') !== -1) return 
     script.src = script.src.replace(/\?.{1,}$/, '');
     filesToDownload.push(script.src);
-    script.src = script.src.replace(templateURL.replace(/\/$/, ''), '');
+    script.src = script.src.replace(templateURL.replace(/https:\/\/[^\/]+/, ''), '');
   });
 
   rocketLazyLoadadedScripts.forEach(script => {
@@ -70,7 +91,7 @@ async function initWebCrafter() {
   for await (const asset of downloadAssets(filesToDownload)) {
     console.log('arquivo baixado: ', asset.fileName);
     console.log('salvando o arquivo ', asset.fileName);
-    const assetLocalName = asset.fileName.replace(templateURL.replace(/\/$/, ''), '')
+    const assetLocalName = asset.fileName.replace(/https:\/\/[^\/]+/, '')
     FileSystem.saveContent(normalize(folderPath + '/' + assetLocalName), asset.file)
     console.log('Arquivo ', asset.fileName, ' salvo');
   }
