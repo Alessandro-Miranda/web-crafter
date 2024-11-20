@@ -1,12 +1,17 @@
-export function getArguments() {
-  const args = process.argv.filter((argument) => argument.startsWith('--'));
-  return args;
+export enum AllowedArgs {
+  SITE_NAME = '--site-name',
+  TEMPLATE_URL = '--template-url',
 }
 
-export function findArgumentByName(argumentsToSearch: string[], argumentName: string) {
-  const argumentNameFormated = `${argumentName}=`;
+export class ArgumentHandle {
+  private static processArguments = process.argv.filter((argument) => {
+    const allowedArgsAsRegex = Object.values(AllowedArgs).join('|');
+    return argument.search(allowedArgsAsRegex) !== -1;
+  });
 
-  return argumentsToSearch
-    .filter((argument) => argument.search(argumentName) !== -1)[0]
-    .replace(argumentNameFormated, '');
+  public static findArgumentByName(argumentName: AllowedArgs) {
+    return this.processArguments
+      .find((argument) => argument.startsWith(argumentName))
+      ?.replace(argumentName + '=', '');
+  }
 }
