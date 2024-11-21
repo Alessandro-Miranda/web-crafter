@@ -16,44 +16,41 @@
   along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************** */
 
-export enum StatusMessages {
-  CREATING_FOLDER = '[Criando pasta]:',
-  FOLDER_CREATED = '[Pasta criada]:',
-  DOWNLOADING_FILE = '[Baixando o arquivo]:',
-  DOWNLOAD_FINISHED = '[Download concluído]:',
-  START = '[Iniciando aplicação]:',
-  GETTING_ASSETS_URLS = '[Obtendo URL dos assets]:',
-  UPDATING_TEMPLATE = '[Atualizando template]:',
-  SAVING_FILE = '[Salvando arquivo]:',
-  FILE_SAVED = '[Arquivo salvo]:',
+export enum StatusMessagesType {
+  STARTING_PROCESS = 'starting_process',
+  DOWNLOADING_TEMPLATE = 'downloading_template',
+  CREATING_INDEX_HTML = 'creating_index.html',
+  DOWNLOAD_COMPLETED = 'download_completed',
+  DOWNLOADING_ASSETS = 'downloadgin_assets',
+  OPENING_PROJECT_FOLDER = 'opening_project_folder'
 }
-
-export enum ErrorMessages {
-  CREATING_FOLDER = '[Erro ao criar pasta]:',
-  DOWNLOADING_FILE = '[Erro ao baixar arquivo]:',
-  INVALID_ARGUMENTS = '[Argumentos passados inválidos]:',
-  OPENING_FOLDER = '[Erro ao tentar abrir pasta]:',
-}
-
-export type MessageOptionsError = {
-  messageType: 'error';
-  message: string; // ou outro tipo
-};
-
-export type MessageOptionsStatus = {
-  messageType: 'status';
-  message: StatusMessages | string;
-};
 
 export class Message {
-  public static show(messageType: 'status' | 'error', message: string) {
-    switch (messageType) {
-      case 'status':
-        console.log(message);
-        break;
+  public static show(type: StatusMessagesType) {
+    switch(type) {
+      case StatusMessagesType.STARTING_PROCESS:
+        console.log('Validando nome do projeto e url do template');
+      break;
 
-      case 'error':
-        console.error(message);
+      case StatusMessagesType.DOWNLOADING_TEMPLATE:
+        console.log('Baixando template...');
+      break;
+
+      case StatusMessagesType.CREATING_INDEX_HTML:
+        console.log('Criando arquivo index.html');
+      break;
+
+      case StatusMessagesType.DOWNLOAD_COMPLETED:
+        console.log('Download concluído. Todos os arquivos foram salvos na pasta do projeto');
+      break;
+
+      case StatusMessagesType.OPENING_PROJECT_FOLDER:
+        console.log('Abrindo a pasta do projeto');
+      break;
+
+      case StatusMessagesType.DOWNLOADING_ASSETS:
+        console.log('Baixando assets');
+      break;
     }
   }
 }
