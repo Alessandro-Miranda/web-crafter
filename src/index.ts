@@ -26,7 +26,7 @@ class Webcrafter {
   private siteName: string | undefined;
   private templateUrl: string | undefined;
   private projectFolderPath: string;
-  private htmlTemplate: EmulateDom | undefined = undefined;
+  private emulatedDom: EmulateDom | undefined = undefined;
 
   constructor(Arguments: typeof ArgumentHandle) {
     Message.show(StatusMessagesType.STARTING_PROCESS);
@@ -61,38 +61,34 @@ class Webcrafter {
 
   private async setHtmlTemplate() {
     Message.show(StatusMessagesType.DOWNLOADING_TEMPLATE);
-    const htmlTemplate = await this.downloadFrom(this.templateUrl as string);
-    this.htmlTemplate = new EmulateDom(htmlTemplate);
+    const htmlTemplate = await this.downloadFile(this.templateUrl as string);
+    this.emulatedDom = new EmulateDom(htmlTemplate);
   }
 
   private async saveContent() {
     FileSystem.saveContent(
       normalize(this.projectFolderPath + '/index.html'),
-      this.htmlTemplate!.getUpdatedHtml()
+      this.emulatedDom!.getUpdatedHtml()
     );
-    await this.saveAssets(this.htmlTemplate!.getAssetsUrl());
-  }
 
-  private async saveAssets(assetsUrl: string[]) {
     Message.show(StatusMessagesType.DOWNLOADING_ASSETS);
 
-    for await (const asset of this.downloadAssetsFrom(assetsUrl)) {
+    const assetsUrl = this.emulatedDom!.getAssetsUrl();
+
+    for await (const asset of this.downloadAssets(assetsUrl)) {
       const assetLocalDirectory = asset.link.replace(/https:\/\/[^\/]+/, '');
-      FileSystem.saveContent(
-        normalize(this.projectFolderPath + '/' + assetLocalDirectory),
-        asset.file
-      );
+      FileSystem.saveContent(normalize(this.projectFolderPath + '/' + assetLocalDirectory), asset.file);
     }
   }
 
-  private async *downloadAssetsFrom(links: string[]) {
-    for (const link of links) {
-      const file = await this.downloadFrom(link);
+  private async *downloadAssets(assetsLinks: string[]) {
+    for (const link of assetsLinks) {
+      const file = await this.downloadFile(link);
       yield { file, link };
     }
   }
 
-  private async downloadFrom(url: string): Promise<string> {
+  private async downloadFile(url: string): Promise<string> {
     return fetch(url).then((resp) => resp.text());
   }
 }
