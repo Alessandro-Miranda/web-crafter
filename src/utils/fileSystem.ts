@@ -19,7 +19,6 @@
 import { exec } from 'child_process';
 import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import { dirname } from 'path';
-import { ErrorMessages, Message } from './message';
 
 export class FileSystem {
   public static createFolder(folderName: string) {
@@ -37,7 +36,7 @@ export class FileSystem {
   public static openFolderInExplorerAndExit(folderPath: string) {
     exec(`start "" explorer "${folderPath}"`, (error) => {
       if (error) {
-        Message.show('error', ErrorMessages.OPENING_FOLDER + error);
+        console.error('Erro ao abrir pasta do projeto: ', error);
         process.exit(1);
       }
 
