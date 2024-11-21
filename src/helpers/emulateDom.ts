@@ -59,7 +59,8 @@ export class EmulateDom {
   }
 
   public getUpdatedHtml() {
-    return this.htmlTemplate;
+    this.cssElements.forEach(link => console.log(link.href));
+    return this.window.document.documentElement.outerHTML;
   }
 
   private getRocketLazyScripts() {
@@ -80,7 +81,7 @@ export class EmulateDom {
 
   private getCssUrl() {
     this.cssElements.forEach((link) => {
-      if (link.href.search('(fonts|cdn)') !== -1) return;
+      if (link.href.search('(https://fonts.*|cdn)') !== -1) return;
       this.filesToDownload.push(this.removeVersionParams(link.href));
       link.href = this.removeTemplateDomain(link.href);
     });
