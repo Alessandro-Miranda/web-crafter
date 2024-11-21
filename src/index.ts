@@ -66,14 +66,14 @@ class Webcrafter {
   }
 
   private async saveContent() {
+    Message.show(StatusMessagesType.DOWNLOADING_ASSETS);
+
+    const assetsUrl = this.emulatedDom!.getAssetsUrl();
+
     FileSystem.saveContent(
       normalize(this.projectFolderPath + '/index.html'),
       this.emulatedDom!.getUpdatedHtml()
     );
-
-    Message.show(StatusMessagesType.DOWNLOADING_ASSETS);
-
-    const assetsUrl = this.emulatedDom!.getAssetsUrl();
 
     for await (const asset of this.downloadAssets(assetsUrl)) {
       const assetLocalDirectory = asset.link.replace(/https:\/\/[^\/]+/, '');
