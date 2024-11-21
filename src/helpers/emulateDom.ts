@@ -21,10 +21,8 @@ import { DOMWindow, JSDOM, VirtualConsole } from 'jsdom';
 export class EmulateDom {
   private virtualConsole = new VirtualConsole();
   private window: DOMWindow;
-  private cssElements: NodeListOf<HTMLLinkElement>;
-  private scriptsElements: NodeListOf<HTMLScriptElement>;
-  private rocketLazyScripts: NodeListOf<HTMLScriptElement>;
-  private filesToDownload: string[] = [];
+  private assetsSelector = ['link[rel=stylesheet]', 'script[src]', 'script[data-rocket-src]'];
+  private assetsElements: Array<HTMLScriptElement | HTMLLinkElement> = [];
 
   constructor(private htmlTemplate: string) {
     this.window = new JSDOM(this.htmlTemplate, {
@@ -33,58 +31,59 @@ export class EmulateDom {
       runScripts: 'outside-only',
     }).window;
 
-    this.cssElements = this.getEmulatedStylesheets();
-    this.scriptsElements = this.getEmulatedScripts();
-    this.rocketLazyScripts = this.getEmulatedRocketLazyScripts();
+    this.getEmulatedAssets();
   }
 
-  private getEmulatedStylesheets() {
-    return this.window.document.querySelectorAll<HTMLLinkElement>('link[rel=stylesheet]');
-  }
-
-  private getEmulatedScripts() {
-    return this.window.document.querySelectorAll<HTMLScriptElement>('script[src]');
-  }
-
-  private getEmulatedRocketLazyScripts() {
-    return this.window.document.querySelectorAll<HTMLScriptElement>('script[data-rocket-src]');
+  private getEmulatedAssets() {
+    this.assetsSelector.forEach(assetSelector => {
+      this.assetsElements.push(
+        ...Array.from(
+          this.window.document.querySelectorAll<HTMLScriptElement | HTMLLinkElement>(assetSelector)
+        )
+      )
+    })
   }
 
   public getAssetsUrl() {
-    this.getCssUrl();
-    this.getScriptUrl();
-    this.getRocketLazyScripts();
+    const filesToDownload: string[] = [];
 
-    return this.filesToDownload;
+    this.assetsElements.forEach(asset => {
+      if (this.isLinkElement(asset)) {
+        if (asset.href.search('(https://fonts.*|cdn)') !== -1) return;
+
+        filesToDownload.push(this.removeVersionParams(asset.href));
+        asset.href = this.removeTemplateDomain(asset.href);
+      }
+      
+      if (this.isScriptElement(asset)) {
+        if (asset.src.search('(gtm|gstatic|connect|analytics|gtag)') !== -1) return;
+
+        let src: string;
+
+        if (asset.dataset.rocketSrc !== undefined) {
+          src = asset.dataset.rocketSrc as string
+        } else {
+          src = asset.src;
+        }
+
+        filesToDownload.push(this.removeVersionParams(src));
+        asset.src = this.removeTemplateDomain(src);
+      }
+    })
+
+    return filesToDownload;
+  }
+
+  private isLinkElement(element: Element): element is HTMLLinkElement {
+    return element.tagName.toLowerCase() === 'link';
+  }
+
+  private isScriptElement(element: Element): element is HTMLScriptElement {
+    return element.tagName.toLowerCase() === 'script';
   }
 
   public getUpdatedHtml() {
-    this.cssElements.forEach(link => console.log(link.href));
     return this.window.document.documentElement.outerHTML;
-  }
-
-  private getRocketLazyScripts() {
-    this.rocketLazyScripts.forEach((script) => {
-      script.src = this.removeVersionParams(script.dataset.rocketSrc as string);
-      this.filesToDownload.push(script.src);
-      script.src = this.removeTemplateDomain(script.src);
-    });
-  }
-
-  private getScriptUrl() {
-    this.scriptsElements.forEach((script) => {
-      if (script.src.search('(gtm|gstatic|connect|analytics|gtag)')) return;
-      this.filesToDownload.push(this.removeVersionParams(script.src));
-      script.src = this.removeTemplateDomain(script.src);
-    });
-  }
-
-  private getCssUrl() {
-    this.cssElements.forEach((link) => {
-      if (link.href.search('(https://fonts.*|cdn)') !== -1) return;
-      this.filesToDownload.push(this.removeVersionParams(link.href));
-      link.href = this.removeTemplateDomain(link.href);
-    });
   }
 
   private removeVersionParams(link: string) {
