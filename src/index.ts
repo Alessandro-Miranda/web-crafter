@@ -16,103 +16,81 @@
   along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ************************************************************************** */
 
-import { exec } from "child_process";
 import { normalize } from "path";
 import { EmulateDom } from "./helpers/emulateDom";
 import { AllowedArgs, ArgumentHandle } from "./utils/arguments";
-import { FileSystem } from "./utils/handleFileSystem";
-import { ErrorMessages, Message, StatusMessages } from "./utils/message";
+import { FileSystem } from "./utils/fileSystem";
+import { Message, StatusMessagesType } from "./utils/message";
 
 class Webcrafter {
-  private SITE_NAME: string | undefined;
-  private TEMPLATE_URL: string | undefined;
-  private projectFolderPath = '';
+  private siteName: string | undefined;
+  private templateUrl: string | undefined;
+  private projectFolderPath: string;
+  private htmlTemplate: EmulateDom | undefined = undefined;
 
   constructor(Arguments: typeof ArgumentHandle) {
-    Message.show('status', StatusMessages.START);
-    this.SITE_NAME = Arguments.findArgumentByName(AllowedArgs.SITE_NAME);
-    this.TEMPLATE_URL = Arguments.findArgumentByName(AllowedArgs.TEMPLATE_URL);
+    Message.show(StatusMessagesType.STARTING_PROCESS);
+    this.siteName = Arguments.findArgumentByName(AllowedArgs.SITE_NAME);
+    this.templateUrl = Arguments.findArgumentByName(AllowedArgs.TEMPLATE_URL);
+    this.projectFolderPath = normalize(`${process.cwd()}/${this.siteName}`);
   }
 
   public async init() {
-    if (!this.SITE_NAME || !this.TEMPLATE_URL) {
-      Message.show(
-        'error',
-        ErrorMessages.INVALID_ARGUMENTS +
-          'É necessário passar o nome do site e link do template para continuar'
-      );
-      return;
-    }
-
-    this.projectFolderPath = normalize(`${process.cwd()}/${this.SITE_NAME}`);
-
-    if (!this.createProjectFolder().isCreated) return;
+    this.validateArguments();
 
     try {
-      Message.show('status', StatusMessages.DOWNLOADING_FILE + ' Fazendo download do template html');
-      const htmlTemplate = await this.downloadFrom(this.TEMPLATE_URL);
-      Message.show('status', StatusMessages.DOWNLOAD_FINISHED + ' Download do template concluído');
+      FileSystem.createFolder(this.projectFolderPath);
+      await this.setHtmlTemplate();
+      Message.show(StatusMessagesType.CREATING_INDEX_HTML);
+      await this.saveContent();
+      Message.show(StatusMessagesType.DOWNLOAD_COMPLETED);
+      Message.show(StatusMessagesType.OPENING_PROJECT_FOLDER);
 
-      const dom = new EmulateDom(htmlTemplate);
-      
-      Message.show('status', StatusMessages.GETTING_ASSETS_URLS + ' Obtendo URL dos arquivos css e javascript');
-
-      const assetsUrls = dom.getAssetsUrl();
-
-      Message.show('status', StatusMessages.DOWNLOADING_FILE + ' baixando arquivos Css e Javascript e atualizando URL\'s no index.html');
-
-      Message.show('status', StatusMessages.SAVING_FILE + ' Salvando template html');
-
-      FileSystem.saveContent(normalize(this.projectFolderPath + '/index.html'), dom.getUpdatedHtml());
-
-      for await (const asset of this.downloadAssetsFrom(assetsUrls)) {
-        Message.show('status', StatusMessages.DOWNLOAD_FINISHED + ' ' + asset.fileName);
-        Message.show('status', StatusMessages.SAVING_FILE + ' ' + asset.fileName);
-        const assetLocalName = asset.fileName.replace(/https:\/\/[^\/]+/, '');
-        FileSystem.saveContent(normalize(this.projectFolderPath + '/' + assetLocalName), asset.file);
-        Message.show('status', StatusMessages.FILE_SAVED + ' ' + asset.fileName);
-      }
-
-
-      Message.show('status', StatusMessages.DOWNLOAD_FINISHED + ' Download de arquivos concluídos. Todos os arquivos foram salvos na pasta: ' + this.projectFolderPath);
-      Message.show('status', 'Abrindo a pasta do projeto');
-
-      exec(`start "" explorer "${this.projectFolderPath}"`, (error) => {
-        if (error) {
-          Message.show('error', ErrorMessages.OPENING_FOLDER + error);
-          process.exit(1);
-        }
-
-        process.exit(0);
-      });
-    } catch(err) {
-      Message.show('error', ErrorMessages.DOWNLOADING_FILE + ' Erro ao baixar o template html ' + err);
+      FileSystem.openFolderInExplorerAndExit(this.projectFolderPath);
+    } catch (err) {
+      console.error(err);
     }
   }
 
-
-  private createProjectFolder() {
-    const status = { isCreated: false };
-
-    try {
-      Message.show('status', StatusMessages.CREATING_FOLDER + ' Criando a pasta ' + this.SITE_NAME);
-      FileSystem.createFolder(this.projectFolderPath);
-      Message.show('status', StatusMessages.FOLDER_CREATED);
-      status.isCreated = true;
-    } catch (error) {
-      Message.show('error', ErrorMessages.CREATING_FOLDER + this.SITE_NAME + ' ' + error);
+  private validateArguments() {
+    if (!this.siteName || !this.templateUrl) {
+      console.error('Argumentos inválidos: nome do projeto e url do template obrigatórios');
+      process.exit(-1);
     }
+  }
 
-    return status;
+  private async setHtmlTemplate() {
+    Message.show(StatusMessagesType.DOWNLOADING_TEMPLATE);
+    const htmlTemplate = await this.downloadFrom(this.templateUrl as string);
+    this.htmlTemplate = new EmulateDom(htmlTemplate);
+  }
+
+  private async saveContent() {
+    FileSystem.saveContent(
+      normalize(this.projectFolderPath + '/index.html'),
+      this.htmlTemplate!.getUpdatedHtml()
+    );
+    await this.saveAssets(this.htmlTemplate!.getAssetsUrl());
+  }
+
+  private async saveAssets(assetsUrl: string[]) {
+    Message.show(StatusMessagesType.DOWNLOADING_ASSETS);
+
+    for await (const asset of this.downloadAssetsFrom(assetsUrl)) {
+      const assetLocalDirectory = asset.link.replace(/https:\/\/[^\/]+/, '');
+      FileSystem.saveContent(
+        normalize(this.projectFolderPath + '/' + assetLocalDirectory),
+        asset.file
+      );
+    }
   }
 
   private async *downloadAssetsFrom(links: string[]) {
     for (const link of links) {
       const file = await this.downloadFrom(link);
-      yield { file, fileName: link };
+      yield { file, link };
     }
   }
-
 
   private async downloadFrom(url: string): Promise<string> {
     return fetch(url).then((resp) => resp.text());
